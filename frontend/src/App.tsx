@@ -1,10 +1,20 @@
-import { ReactElement, useEffect, useState } from "react";
+import { ReactElement, useEffect, useState, useMemo } from "react";
 import "./App.css";
-import IDL from "./idl";
+import { IDL } from "./idl";
 import { Connection, PublicKey, clusterApiUrl } from "@solana/web3.js";
-import { Program, AnchorProvider, web3, utils, BN } from "@coral-xyz/anchor";
+import {
+  Program,
+  AnchorProvider,
+  web3,
+  utils,
+  BN,
+  Idl,
+  Wallet,
+} from "@coral-xyz/anchor";
+import * as buffer from "buffer";
+window.Buffer = buffer.Buffer;
 
-const programId = new PublicKey(IDL.address);
+const programId = new PublicKey("E9JvpKoPBCFP8Y5h2XLnRk8EintPJE43AF7Rk5G6DnKx");
 const network = clusterApiUrl("devnet");
 const opts = {
   preflightCommitment: "processed",
@@ -14,19 +24,27 @@ const { SystemProgram } = web3;
 
 const App = () => {
   const [walletAddress, setWalletAddress] = useState(null);
-  const getProvider = () => {
-    const connection = new Connection(network, opts.preflightCommitment);
-    const provider = new AnchorProvider(
-      connection,
-      window.solana,
-      opts.preflightCommitment
-    );
+  const [provider, setProvider] = useState<AnchorProvider | null>(null);
 
-    return provider;
-  };
+  const getProvider = useMemo(() => {
+    if (walletAddress) {
+      const connection = new Connection(network, opts.preflightCommitment);
+      return new AnchorProvider(
+        connection,
+        (window as any).solana as Wallet,
+        AnchorProvider.defaultOptions()
+      );
+    }
+    return null;
+  }, [walletAddress]);
+
+  useEffect(() => {
+    setProvider(getProvider || null);
+  }, [getProvider]);
+
   const checkIfWalletIsConnected = async () => {
     try {
-      const { solana } = window;
+      const { solana } = window as any;
       if (solana) {
         if (solana.isPhantom) {
           console.log("Phamtom wallet found");
@@ -47,7 +65,7 @@ const App = () => {
   };
 
   const connectWallet = async () => {
-    const { solana } = window;
+    const { solana } = window as any;
     if (solana) {
       const response = await solana.connect();
       console.log("Wallet connected", response.publicKey.toString());
@@ -57,29 +75,42 @@ const App = () => {
 
   const createCampaign = async () => {
     try {
-      const provider = getProvider();
+      if (!provider) {
+        console.error("Provider is not available");
+        return;
+      }
 
-      const program = new Program(IDL, programId, provider);
+      console.log("IDL", IDL, "programId", programId, "provider", provider);
+      const program = new Program(IDL as Idl, provider);
 
-      // Generate a unique seed for the campaign
-      const uniqueSeed = Math.random().toString();
+      console.log("program", program);
 
-      const [campaign] = await PublicKey.findProgramAddress(
+      const [campaign] = PublicKey.findProgramAddressSync(
         [
           utils.bytes.utf8.encode("CAMPAIGN_DEMO"),
           provider.wallet.publicKey.toBuffer(),
-          utils.bytes.utf8.encode(uniqueSeed), // Add unique seed
         ],
         program.programId
       );
 
-      await program.rpc.create("campaign name", "campaign description", {
-        accounts: {
+      console.log("campaign", campaign);
+
+      // await program.rpc.create("campaign name", "campaign description", {
+      //   accounts: {
+      //     campaign,
+      //     user: provider.wallet.publicKey,
+      //     systemProgram: SystemProgram.programId,
+      //   },
+      // });
+
+      await program.methods
+        .create("Campaign Name", "Campaign Description")
+        .accounts({
           campaign,
           user: provider.wallet.publicKey,
           systemProgram: SystemProgram.programId,
-        },
-      });
+        })
+        .rpc();
 
       console.log("Created a new campaign", campaign.toString());
     } catch (error) {
