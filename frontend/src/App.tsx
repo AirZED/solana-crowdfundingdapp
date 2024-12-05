@@ -25,10 +25,14 @@ const { SystemProgram } = web3;
 const App = () => {
   const [walletAddress, setWalletAddress] = useState(null);
   const [provider, setProvider] = useState<AnchorProvider | null>(null);
+  const [campaigns, setCampaigns] = useState([]);
 
   const getProvider = useMemo(() => {
     if (walletAddress) {
-      const connection = new Connection(network, opts.preflightCommitment);
+      const connection = new Connection(
+        network,
+        opts.preflightCommitment as web3.Commitment
+      );
       return new AnchorProvider(
         connection,
         (window as any).solana as Wallet,
@@ -73,6 +77,38 @@ const App = () => {
     }
   };
 
+  const getCampaigns = async () => {
+    const connection = new Connection(
+      network,
+      opts.preflightCommitment as web3.Commitment
+    );
+    if (!provider) {
+      console.error("Provider is not available");
+      return;
+    }
+
+    const program = new Program(IDL as Idl, provider);
+    const accounts = await connection.getProgramAccounts(programId);
+
+    console.log(accounts)
+
+    const campaigns = await Promise.all(
+      accounts.map(async (campaign) => {
+        const campaignData = await program.account.campaign.fetch(
+          campaign.pubkey
+        );
+        return {
+          ...campaignData,
+          pubkey: campaign.pubkey.toString(), // Ensure public key is a string for easier use
+        };
+      })
+    );
+
+    console.log(campaigns)
+
+    setCampaigns(campaigns as any);
+  };
+
   const createCampaign = async () => {
     try {
       if (!provider) {
@@ -82,6 +118,7 @@ const App = () => {
 
       console.log("IDL", IDL, "programId", programId, "provider", provider);
       const program = new Program(IDL as Idl, provider);
+      // since the program Id is in the Idl, anchor auto detects it.
 
       console.log("program", program);
 
@@ -123,7 +160,16 @@ const App = () => {
   };
 
   const RenderConnectedContainer = () => {
-    return <button onClick={createCampaign}>Create Campaign</button>;
+    return (
+      <>
+        <button onClick={createCampaign}>Create Campaign</button>{" "}
+        <button onClick={getCampaigns}>Get Campaigns</button>
+        <br />
+        {campaigns.map((campaign) => {
+           return <p>Campaign Id: {campaign.pubkey.toString()}</p>;
+        })}
+      </>
+    );
   };
 
   useEffect(() => {
