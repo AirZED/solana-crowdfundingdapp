@@ -1,7 +1,12 @@
 import { ReactElement, useEffect, useState, useMemo } from "react";
 import "./App.css";
 import { IDL } from "./idl";
-import { Connection, PublicKey, clusterApiUrl } from "@solana/web3.js";
+import {
+  Connection,
+  LAMPORTS_PER_SOL,
+  PublicKey,
+  clusterApiUrl,
+} from "@solana/web3.js";
 import {
   Program,
   AnchorProvider,
@@ -12,6 +17,7 @@ import {
   Wallet,
 } from "@coral-xyz/anchor";
 import * as buffer from "buffer";
+import { publicKey } from "@coral-xyz/anchor/dist/cjs/utils";
 window.Buffer = buffer.Buffer;
 
 const programId = new PublicKey("E9JvpKoPBCFP8Y5h2XLnRk8EintPJE43AF7Rk5G6DnKx");
@@ -20,7 +26,16 @@ const opts = {
   preflightCommitment: "processed",
   // this waits for out node to confirm our trasaction
 };
+
 const { SystemProgram } = web3;
+
+type Campaign = {
+  pubkey: string;
+  name: string;
+  description: string;
+  amountDonated: number;
+  admin: PublicKey;
+};
 
 const App = () => {
   const [walletAddress, setWalletAddress] = useState(null);
@@ -90,7 +105,7 @@ const App = () => {
     const program = new Program(IDL as Idl, provider);
     const accounts = await connection.getProgramAccounts(programId);
 
-    console.log(accounts)
+    console.log(accounts);
 
     const campaigns = await Promise.all(
       accounts.map(async (campaign) => {
@@ -104,7 +119,7 @@ const App = () => {
       })
     );
 
-    console.log(campaigns)
+    console.log(campaigns);
 
     setCampaigns(campaigns as any);
   };
@@ -155,6 +170,30 @@ const App = () => {
     }
   };
 
+  const donate = async (publicKey: string) => {
+    try {
+      if (!provider) {
+        console.error("Provider is not available");
+        return;
+      }
+
+      const program = new Program(IDL as Idl, provider);
+      await program.methods
+        .donate(new BN(0.2 * LAMPORTS_PER_SOL))
+        .accounts({
+          campaign: publicKey,
+          user: provider.wallet.publicKey,
+          systemProgram: SystemProgram.programId,
+        })
+        .rpc();
+
+      console.log("Donated to campaign", publicKey);
+      getCampaigns();
+    } catch (error) {
+      console.error("Error donating campaign", error);
+    }
+  };
+
   const RenderNotConnectedContainer = (): ReactElement => {
     return <button onClick={connectWallet}>Connect Wallet</button>;
   };
@@ -164,10 +203,23 @@ const App = () => {
       <>
         <button onClick={createCampaign}>Create Campaign</button>{" "}
         <button onClick={getCampaigns}>Get Campaigns</button>
-        <br />
-        {campaigns.map((campaign) => {
-           return <p>Campaign Id: {campaign.pubkey.toString()}</p>;
-        })}
+        <div>
+          <h1>Campaigns</h1>
+          {campaigns.map((campaign: Campaign) => {
+            return (
+              <div key={campaign.pubkey.toString()}>
+                <p>Campaign Id: {campaign.pubkey.toString()}</p>
+                <p>
+                  Balance{" "}
+                  {(campaign.amountDonated / LAMPORTS_PER_SOL).toString()}
+                </p>
+                <p>Campaign Name: {campaign.name}</p>
+                <p>Campaign Description: {campaign.description}</p>
+                <button onClick={() => donate(campaign.pubkey)}>Donate</button>
+              </div>
+            );
+          })}
+        </div>
       </>
     );
   };
