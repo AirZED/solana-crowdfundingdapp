@@ -38,7 +38,7 @@ type Campaign = {
 };
 
 const App = () => {
-  const [walletAddress, setWalletAddress] = useState(null);
+  const [walletAddress, setWalletAddress] = useState<string | null>(null);
   const [provider, setProvider] = useState<AnchorProvider | null>(null);
   const [campaigns, setCampaigns] = useState([]);
 
@@ -194,6 +194,28 @@ const App = () => {
     }
   };
 
+  const withdraw = async (publicKey: string) => {
+    try {
+      if (!provider) {
+        console.error("Provider is not available");
+        return;
+      }
+
+      const program = new Program(IDL as Idl, provider);
+      await program.methods
+        .withdraw(new BN(0.1 * LAMPORTS_PER_SOL))
+        .accounts({
+          campaign: publicKey,
+          user: provider.wallet.publicKey,
+        })
+        .rpc();
+
+      console.log("WIthrawn successfully", publicKey);
+      getCampaigns();
+    } catch (error) {
+      console.error("Error withdrawing from campaign", error);
+    }
+  };
   const RenderNotConnectedContainer = (): ReactElement => {
     return <button onClick={connectWallet}>Connect Wallet</button>;
   };
@@ -216,6 +238,9 @@ const App = () => {
                 <p>Campaign Name: {campaign.name}</p>
                 <p>Campaign Description: {campaign.description}</p>
                 <button onClick={() => donate(campaign.pubkey)}>Donate</button>
+                <button onClick={() => withdraw(campaign.pubkey)}>
+                  Withdraw
+                </button>
               </div>
             );
           })}
